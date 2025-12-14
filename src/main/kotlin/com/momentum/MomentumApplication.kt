@@ -1,4 +1,4 @@
-package com.momentum.backend
+package com.momentum
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
