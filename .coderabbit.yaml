@@ -1,0 +1,16 @@
+language: "ko"
+
+reviews:
+  auto_review:
+    enabled: true
+    drafts: false
+  review_status: true
+
+chat:
+  auto_reply: true
+
+tone_instructions: >
+  시니어 백엔드 개발자 관점에서 코드에 근거해 간결하게 리뷰해줘.
+  가독성, 유지보수성, 잠재적 버그를 우선으로 보고,
+  네이밍, 단일 책임, 중복 코드, 과도한 복잡도를 클린코드 관점에서 점검해줘.
+  개선 사항은 권장 수준으로 제안하고 불필요한 리팩토링은 피해주세요.
