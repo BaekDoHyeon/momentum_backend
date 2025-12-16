@@ -1,5 +1,6 @@
 package com.momentum.global.config
 
+import com.momentum.global.security.jwt.JwtAuthenticationFilter
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -8,28 +9,28 @@ import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 
 @Configuration
 @EnableWebSecurity
-class SecurityConfig {
+class SecurityConfig(
+    private val jwtAuthenticationFilter: JwtAuthenticationFilter
+) {
 
-    /**
-     *  - csrf().disable(): CSRF 보호 비활성화 (REST API용)
-     *  - anyRequest().permitAll(): 모든 URL 허용 (개발 단계용)
-     *  - sessionCreationPolicy(STATELESS): 세션 사용 안 함 (JWT 사용 대비)
-     *  - BCryptPasswordEncoder: 비밀번호 암호화용 (나중에 사용자 인증 구현 시 필요)
-     *
-     */
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .csrf { it.disable() }
             .authorizeHttpRequests { auth ->
-                auth.anyRequest().permitAll()
+                auth
+                    //.requestMatchers("/api/auth/**").permitAll()
+                    .requestMatchers("/**").permitAll()
+                    .anyRequest().authenticated()
             }
             .sessionManagement { session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             }
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
 
         return http.build()
     }
