@@ -12,25 +12,38 @@ class Memoir(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
+    user: User,
+    satisfaction: Satisfaction,
+    concentration: Concentration,
+    achievement: String? = null,
+    improvement: String? = null,
+    memo: String? = null
+) : BaseEntity() {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    var user: User,
+    var user: User = user
+        private set
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    var satisfaction: Satisfaction,     // 만족도
+    var satisfaction: Satisfaction = satisfaction     // 만족도
+        private set
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    var concentration: Concentration,   // 집중도
+    var concentration: Concentration = concentration   // 집중도
+        private set
 
     @Column(nullable = true)
-    var achievement: String? = null,           // 잘한점
+    var achievement: String? = achievement           // 잘한점
+        private set
 
     @Column(nullable = true)
-    var improvement: String? = null,           // 부족한점
+    var improvement: String? = improvement           // 부족한점
+        private set
 
     @Column(nullable = true)
-    var memo: String? = null
-) : BaseEntity()
+    var memo: String? = memo
+        private set
+}
