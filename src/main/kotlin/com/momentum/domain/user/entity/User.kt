@@ -14,22 +14,29 @@ class User(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
+    email: String,
+    password: String,
+    name: String,
+    role: UserRole = UserRole.ROLE_USER
+
+) : BaseEntity(), UserDetails {
 
     @Column(unique = true, nullable = false)
-    var email: String,
+    var email: String = email
+        private set
 
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(nullable = false)
-    private var password: String,
+    private var password: String = password
 
     @Column(nullable = false)
-    var name: String,
+    var name: String = name
+        private set
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    var role: UserRole = UserRole.ROLE_USER
-
-) : BaseEntity(), UserDetails {
+    var role: UserRole = role
+        private set
 
     override fun getAuthorities(): Collection<GrantedAuthority> {
         return listOf(SimpleGrantedAuthority(role.name))

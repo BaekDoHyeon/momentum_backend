@@ -14,32 +14,50 @@ class Schedule(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
+    user: User,
+    title: String,
+    startAt: LocalDateTime,
+    endAt: LocalDateTime,
+    notifyMinutes: ScheduleNotifyMinutes,   // 일정 알람
+    category: ScheduleCategory,             // 일정 카테고리
+    status: ScheduleStatus,                // 일정 상태
+    memo: String? = null
+) : BaseEntity() {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    var user: User,
+    var user: User = user
+        private set
 
     @Column(nullable = false)
-    var title: String,
+    var title: String = title
+        private set
 
     @Column(nullable = false)
-    var startAt: LocalDateTime,
+    var startAt : LocalDateTime = startAt
+        private set
 
     @Column(nullable = false)
-    var endAt: LocalDateTime,
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    var notifyMinutes: ScheduleNotifyMinutes,   // 일정 알람
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    var category: ScheduleCategory,             // 일정 카테고리
+    var endAt : LocalDateTime = endAt
+        private set
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    var status: ScheduleStatus,                // 일정 상태
+    var notifyMinutes : ScheduleNotifyMinutes = notifyMinutes
+        private set
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var category : ScheduleCategory = category
+        private set
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var status : ScheduleStatus = status
+        private set
 
     @Column(nullable = true)
-    var memo: String? = null
-) : BaseEntity()
+    var memo : String? = memo
+        private set
+
+}
