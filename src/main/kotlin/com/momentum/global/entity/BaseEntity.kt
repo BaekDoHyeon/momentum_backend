@@ -14,11 +14,11 @@ abstract class BaseEntity {
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
-    var createdAt: LocalDateTime? = null
+    lateinit var createdAt: LocalDateTime
         private set
 
     @LastModifiedDate
     @Column(nullable = false)
-    var updatedAt: LocalDateTime? = null
+    lateinit var updatedAt: LocalDateTime
         private set
 }
