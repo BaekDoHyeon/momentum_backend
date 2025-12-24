@@ -21,6 +21,8 @@ enum class ErrorCode(
     // 요청 검증 (V: Validation)
     INVALID_INPUT("V001", "입력값이 올바르지 않습니다", HttpStatus.BAD_REQUEST),
     MISSING_REQUIRED_FIELD("V002", "필수 항목이 누락되었습니다", HttpStatus.BAD_REQUEST),
+    INVALID_PAGE_SIZE("V003", "페이지 크기는 1 이상 100 이하여야 합니다", HttpStatus.BAD_REQUEST),
+    INVALID_CURSOR_CONTENT_SIZE("V004", "커서 페이지네이션 컨텐츠 크기가 올바르지 않습니다", HttpStatus.BAD_REQUEST),
 
     // 리소스 (R: Resource)
     RESOURCE_NOT_FOUND("R001", "요청한 리소스를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
