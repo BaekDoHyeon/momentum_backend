@@ -12,6 +12,257 @@
 
 ---
 
+## 💡 왜 Cursor 방식인가? (Offset 방식과의 비교)
+
+### 자바 전통 방식: Offset 기반 페이징
+
+```java
+// Spring Data JPA - 자바 개발자에게 익숙한 방식
+Page<Notification> page = repository.findAll(
+    PageRequest.of(0, 20)  // page=0, size=20
+);
+
+// SQL 예시
+SELECT * FROM notifications
+ORDER BY created_at DESC
+LIMIT 20 OFFSET 0;  -- 1페이지
+
+SELECT * FROM notifications
+ORDER BY created_at DESC
+LIMIT 20 OFFSET 40; -- 3페이지
+```
+
+**문제점:**
+```
+데이터: [A, B, C, D, E, F, G, H]
+
+1. 사용자가 1페이지 조회 (OFFSET 0, LIMIT 4)
+   → 결과: [A, B, C, D]
+
+2. 새 데이터 2개 추가 (X, Y가 맨 앞에 삽입)
+   → 데이터: [X, Y, A, B, C, D, E, F, G, H]
+
+3. 사용자가 2페이지 조회 (OFFSET 4, LIMIT 4)
+   → 결과: [C, D, E, F]
+   → 문제: C, D가 중복 조회됨! (1페이지에서 이미 봤음)
+```
+
+**성능 문제:**
+```sql
+-- OFFSET 10000은 10000개를 스캔 후 버림
+SELECT * FROM notifications
+ORDER BY created_at DESC
+LIMIT 20 OFFSET 10000;  -- 매우 느림!
+```
+
+### Cursor 방식: "마지막으로 본 위치"를 기억
+
+```kotlin
+// 첫 요청
+GET /api/notifications?size=20
+→ 응답: { content: [...], nextCursor: "MTIzOjIwMjUtMTItMjNUMTA6MzA6MDA=" }
+
+// 다음 요청 (마지막으로 본 위치를 cursor로 전달)
+GET /api/notifications?cursor=MTIzOjIwMjUtMTItMjNUMTA6MzA6MDA=&size=20
+
+// SQL
+SELECT * FROM notifications
+WHERE (created_at, id) < ('2025-12-23T10:30:00', 123)  -- cursor 조건
+ORDER BY created_at DESC, id DESC
+LIMIT 21;  -- size+1
+```
+
+**장점:**
+- ✅ **일관성**: 데이터 추가/삭제 시에도 중복/누락 없음
+- ✅ **성능**: OFFSET 없이 WHERE 조건만 사용 → 인덱스 효율적
+- ✅ **무한 스크롤**: 소셜미디어 피드처럼 끝없이 스크롤
+
+**비유:**
+- **Offset 방식**: "책의 40페이지를 펼쳐줘" → 중간에 페이지 추가되면 위치 틀어짐
+- **Cursor 방식**: "마지막으로 읽은 문장 다음부터 읽어줘" → 항상 정확한 위치
+
+---
+
+## 🔐 Cursor 인코딩: 필수인가 선택인가?
+
+### 인코딩 하지 않으면?
+
+```
+❌ GET /api/notifications?cursor=123:2025-12-23T10:30:00&size=20
+
+문제점:
+1. URL 특수문자: ':' 문자가 인코딩 필요할 수 있음
+2. 내부 구조 노출: DB 스키마 (id, timestamp) 그대로 노출
+3. 조작 가능성: 사용자가 임의로 "9999:2030-01-01T00:00:00" 같은 값 시도
+```
+
+### 인코딩하면?
+
+```
+✅ GET /api/notifications?cursor=MTIzOjIwMjUtMTItMjNUMTA6MzA6MDA=&size=20
+
+장점:
+1. URL-safe: Base64는 URL에 안전한 문자만 사용
+2. 불투명 토큰: 내부 구조를 숨김 (향후 cursor 필드 변경해도 클라이언트 수정 불필요)
+3. 조작 어려움: 사용자가 임의 값 만들기 어려움 (완벽한 보안은 아님)
+```
+
+### 실무 선택 가이드
+
+| 상황 | 권장 방식 | 이유 |
+|------|----------|------|
+| Public API (모바일 앱, 외부 연동) | ✅ **인코딩 필수** | 구조 숨김, 향후 변경 유연성 |
+| Internal API (같은 회사 프론트/백) | ⚠️ 선택 가능 | 디버깅 편의성 vs 보안 트레이드오프 |
+| 디버깅 중 | ❌ 인코딩 제거 고려 | 로그에서 바로 확인 가능 |
+
+**결론:**
+- 이 프로젝트는 **인코딩 사용 권장** (프로덕션 수준 구현)
+- 디버깅이 어렵다면 개발환경에서만 인코딩 skip 가능 (환경변수로 분기)
+
+---
+
+## 📱 실제 무한 스크롤 동작 시나리오
+
+### 사용자가 알림 피드를 스크롤하는 상황
+
+```
+[초기 상태] DB에 알림 100개 존재
+
+┌─────────────────────────────┐
+│  📱 사용자 화면              │
+│                             │
+│  [ 알림 1 ] createdAt: 10시 │ ← 화면에 보임
+│  [ 알림 2 ] createdAt: 09시 │
+│  [ 알림 3 ] createdAt: 08시 │
+│  ...                        │
+│  [ 알림 20 ] createdAt: 01시│ ← 마지막 데이터 (id=20, createdAt=01시)
+│                             │
+│  [로딩중...] ← 스크롤 끝     │
+└─────────────────────────────┘
+
+1️⃣ 첫 요청
+GET /api/notifications?size=20
+
+→ 서버: DB에서 21개 조회 (size+1)
+→ 응답:
+{
+  "content": [...20개...],
+  "hasNext": true,  // 21개가 조회됨 → 다음 페이지 있음
+  "nextCursor": "MjA6MjAyNS0xMi0yM1QwMTowMDowMA==",  // 20번 알림의 cursor
+  "size": 20
+}
+
+
+2️⃣ 사용자가 스크롤 다운 (새 알림 2개 추가됨!)
+→ 프론트: nextCursor를 그대로 전달
+
+GET /api/notifications?cursor=MjA6MjAyNS0xMi0yM1QwMTowMDowMA==&size=20
+                                 ↑
+                            디코딩하면: "20:2025-12-23T01:00:00"
+
+→ 서버 쿼리:
+SELECT * FROM notifications
+WHERE (created_at, id) < ('2025-12-23T01:00:00', 20)  -- 20번 이후 데이터만
+ORDER BY created_at DESC, id DESC
+LIMIT 21;
+
+→ 결과: 21~40번 알림 조회 (새로 추가된 알림은 무시됨!)
+→ 중복 없음, 누락 없음
+
+
+3️⃣ 마지막 페이지
+GET /api/notifications?cursor=...&size=20
+
+→ 서버: DB에서 15개만 조회됨 (size+1인 21개보다 적음)
+→ 응답:
+{
+  "content": [...15개...],
+  "hasNext": false,  // 더 이상 없음
+  "nextCursor": null,
+  "size": 15
+}
+
+→ 프론트: "더 이상 알림이 없습니다" 표시
+```
+
+---
+
+## 🔄 자바 방식과 Kotlin Cursor 방식 비교
+
+### 자바 전통 방식 (Spring Data JPA)
+
+```java
+// Controller
+@GetMapping("/notifications")
+public Page<NotificationResponse> getNotifications(
+    @RequestParam(defaultValue = "0") int page,
+    @RequestParam(defaultValue = "20") int size
+) {
+    Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+    Page<Notification> result = repository.findAll(pageable);
+
+    return result.map(NotificationResponse::from);
+}
+
+// 응답 JSON
+{
+  "content": [...],
+  "pageable": { "pageNumber": 0, "pageSize": 20 },
+  "totalPages": 5,
+  "totalElements": 100,
+  "last": false
+}
+
+// 클라이언트 요청
+GET /notifications?page=0&size=20  // 1페이지
+GET /notifications?page=1&size=20  // 2페이지
+GET /notifications?page=2&size=20  // 3페이지
+```
+
+### Kotlin Cursor 방식 (이 프로젝트)
+
+```kotlin
+// Controller
+@GetMapping("/notifications")
+fun getNotifications(
+    @RequestParam cursor: String?,
+    @RequestParam(defaultValue = "20") size: Int
+): ResponseEntity<ApiResponse.Success<CursorPageResponse<NotificationResponse>>> {
+    val response = service.getNotifications(cursor, size)
+    return ResponseEntity.ok(ApiResponse.Success(data = response, code = SuccessCode.READ))
+}
+
+// 응답 JSON
+{
+  "data": {
+    "content": [...],
+    "hasNext": true,
+    "nextCursor": "MTIzOjIwMjUtMTItMjNUMTA6MzA6MDA=",
+    "size": 20
+  },
+  "code": "S003"
+}
+
+// 클라이언트 요청
+GET /notifications?size=20  // 첫 요청
+GET /notifications?cursor=MTIzOjIwMjUtMTItMjNUMTA6MzA6MDA=&size=20  // 다음 요청
+GET /notifications?cursor=다음커서값&size=20  // 계속...
+```
+
+### 핵심 차이
+
+| 항목 | 자바 Offset 방식 | Kotlin Cursor 방식 |
+|------|-----------------|-------------------|
+| 요청 파라미터 | `page=2` (페이지 번호) | `cursor=인코딩값` (마지막 위치) |
+| SQL | `OFFSET 40 LIMIT 20` | `WHERE (created_at, id) < (...)` |
+| 데이터 중복/누락 | ⚠️ 가능 (실시간 변경 시) | ✅ 없음 |
+| 성능 (10000번째 데이터) | ❌ 느림 (10000개 스캔) | ✅ 빠름 (인덱스만) |
+| 페이지 점프 | ✅ 가능 (특정 페이지 이동) | ❌ 불가 |
+| 총 개수 제공 | ✅ `totalElements: 100` | ❌ 없음 |
+| 사용 사례 | 게시판, 관리자 페이지 | 소셜 피드, 무한 스크롤 |
+
+---
+
 ## 🤔 data class vs sealed interface 질문에 대한 답변
 
 ### 왜 ApiResponse는 sealed interface이고 DTO는 data class인가?
@@ -368,14 +619,19 @@ const loadMore = async () => {
 ## 🎯 기대 효과
 
 ### 장점
-✅ **일관성**: 데이터 추가/삭제 시에도 중복/누락 없음
+✅ **일관성**: 데이터 추가/삭제 시에도 중복/누락 없음.
+
 ✅ **성능**: 큰 offset 없이 WHERE 조건만 사용 (인덱스 효율적)
+
 ✅ **확장성**: 무한 스크롤에 최적화
+
 ✅ **간단함**: hasNext만으로 충분 (COUNT 불필요)
 
 ### 제약사항
 ⚠️ 페이지 점프 불가 (특정 페이지로 직접 이동 불가)
+
 ⚠️ 총 개수 미제공 (필요 시 별도 API 구현 필요)
+
 ⚠️ 정렬 제한 (커서 필드 기준으로만 정렬)
 
 ---
